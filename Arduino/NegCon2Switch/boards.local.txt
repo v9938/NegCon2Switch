@@ -1,0 +1,10 @@
+LilyPadUSB.build.vid=0x0f0d
+LilyPadUSB.build.pid=0x0092
+LilyPadUSB.build.usb_product="HORI Pokken Tournament DX Pro Pad"
+LilyPad.build.vid=0x0f0d
+LilyPad.build.pid=0x0092
+LilyPad.build.usb_product="HORI Pokken Tournament DX Pro Pad"
+
+leonardo.build.vid=0x0f0d
+leonardo.build.pid=0x0092
+leonardo.build.usb_product="HORI Pokken Tournament DX Pro Pad"
