@@ -4,13 +4,14 @@
 // Copyright 2025 @V9938
 //	
 //	25/06/07 V0.1		1st version
+//	25/06/07 V0.2		fix I/II/L Analog Value , change library NintendoSwitchControlLibrary.
 //
 // This program requires 
 // "PsxNewLib”
 // https://github.com/SukkoPera/PsxNewLib
 //
-// "SwitchControlLibrary"
-// https://github.com/celclow/SwitchControlLibrary
+// "NintendoSwitchControlLibrary"
+// https://github.com/lefmarna/NintendoSwitchControlLibrary
 //
 // Use Arduino AVR board version v1.82 or below
 //
@@ -24,17 +25,21 @@
 // #define USB_VID 0x0f0d
 // #define USB_PID 0x0092
 // 
+// DX筐体モードだと、右スティックにシフトが来るのでこの配置だと使えないです。
+// SD筐体モードでお楽しみください。
 ////////////////////////////////////////////////////////////////////////
 
 #include <PsxControllerHwSpi.h>
 #include <DigitalIO.h>
-#include <CustomHID.h>
-#include <SwitchControlLibrary.h>
+#include <NintendoSwitchControlLibrary.h>
 
 #include <avr/pgmspace.h>
 typedef const __FlashStringHelper * FlashStr;
 typedef const byte* PGM_BYTES_P;
 #define PSTR_TO_F(s) reinterpret_cast<const __FlashStringHelper *> (s)
+
+// ネジコンアナログ値の補正
+#define NEG_CALIB 1.2
 
 /** \brief Pin used for Controller Attention (ATTN)
  *
@@ -99,6 +104,26 @@ const char* const controllerProtoStrings[PSPROTO_MAX + 1] PROGMEM = {
 	ctrlTypeOutOfBounds
 };
 
+const byte hatValue[0x10] = {
+	Hat::NEUTRAL,
+	Hat::UP,
+	Hat::RIGHT,
+  Hat::UP_RIGHT,
+	Hat::DOWN,
+	Hat::NEUTRAL,
+	Hat::DOWN_RIGHT,
+	Hat::NEUTRAL,
+	Hat::LEFT,
+	Hat::UP_LEFT,
+	Hat::NEUTRAL,
+	Hat::NEUTRAL,
+	Hat::DOWN_LEFT,
+	Hat::NEUTRAL,
+	Hat::NEUTRAL,
+	Hat::NEUTRAL
+};
+
+
  
 void setup () {
   SwitchControlLibrary();
@@ -117,7 +142,9 @@ void setup () {
 void loop () {
 	static int8_t slx, sly, sb1, sb2, sbL;
   byte l_x, l_y, l_b1, l_b2, l_bL;
+  byte l_x_tmp;
   bool bSendData;
+  byte hat_num;
 	
 	
 	if (!haveController) {
@@ -182,29 +209,8 @@ void loop () {
       else
         SwitchControlLibrary().releaseButton(Button::PLUS);
 
-      // buttonUp = HatButton::UP
-      if (psx.getButtonWord () & 0x0010) 
-        SwitchControlLibrary().pressHatButton(HatButton::UP);
-      else
-        SwitchControlLibrary().releaseHatButton(HatButton::UP);
-
-      // buttonRight = HatButton::RIGHT
-      if (psx.getButtonWord () & 0x0020) 
-        SwitchControlLibrary().pressHatButton(HatButton::RIGHT);
-      else
-        SwitchControlLibrary().releaseHatButton(HatButton::RIGHT);
-
-      // buttonDown = HatButton::DOWN
-      if (psx.getButtonWord () & 0x0040) 
-        SwitchControlLibrary().pressHatButton(HatButton::DOWN);
-      else
-        SwitchControlLibrary().releaseHatButton(HatButton::DOWN);
-
-      // buttonLeft = HatButton::LEFT
-      if (psx.getButtonWord () & 0x0080) 
-        SwitchControlLibrary().pressHatButton(HatButton::LEFT);
-      else
-        SwitchControlLibrary().releaseHatButton(HatButton::LEFT);
+      // hat_switch
+      SwitchControlLibrary().pressHatButton(hatValue[(psx.getButtonWord () & 0x00f0)>>4]);
 
       // buttonL2 = Button::ZL
       if (psx.getButtonWord () & 0x0100) 
@@ -274,13 +280,27 @@ void loop () {
 				    sb1 = l_b1;
 				    sb2 = l_b2;
 				    sbL = l_bL;
-            
-            SwitchControlLibrary().moveLeftStick (l_x,  0x80);
-            SwitchControlLibrary().moveRightStick(0x80-l_b1 + l_b2, 0x80 + l_bL);
-          }
 
-          if (l_b1 > 0x04)  SwitchControlLibrary().pressButton(Button::ZR);
-          if (l_b2 > 0x04)  SwitchControlLibrary().pressButton(Button::ZL);
+            // 各々のアナログ値がちょっと鈍い感じもあるので少しだけ補正する
+            if (l_x > 0x80) {
+              l_x_tmp = (l_x - 0x7f) * NEG_CALIB;
+              if (l_x_tmp > 0x7f) l_x_tmp = 0x7f;
+              l_x = 0x80 + l_x_tmp;
+            }else{
+              l_x_tmp = (0x80 - l_x) * NEG_CALIB;
+              if (l_x_tmp > 0x80) l_x_tmp = 0x80;
+              l_x = 0x80 - l_x_tmp;
+            }
+            l_b1 = l_b1 * NEG_CALIB;
+            if (l_b1 > 0x80) l_b1 = 0x80;
+            l_b2 = l_b2 * NEG_CALIB;
+            if (l_b2 > 0x7f) l_b2 = 0x7f;
+            l_bL = l_bL * NEG_CALIB;
+            if (l_bL > 0x7f) l_bL = 0x7f;
+
+            SwitchControlLibrary().moveLeftStick (l_x,  0x80);
+            SwitchControlLibrary().moveRightStick(0x80 + l_bL, 0x80-l_b1 + l_b2);
+          }
 
           SwitchControlLibrary().releaseButton(Button::Y);
           SwitchControlLibrary().releaseButton(Button::B);
